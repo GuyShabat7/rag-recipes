@@ -21,19 +21,74 @@ Gluten-free uses ingredient keyword matching (cannot be derived from nutrition v
 """
 
 import logging
+import re
 
 import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Ingredients that contain gluten — used for is_gluten_free flag
-GLUTEN_KEYWORDS = {
-    "wheat", "flour", "all-purpose flour", "whole wheat", "bread flour",
-    "barley", "rye", "semolina", "spelt", "farro", "bulgur", "durum",
-    "triticale", "kamut", "wheat germ", "wheat starch", "wheat bran",
-    "matzo", "couscous", "orzo", "breadcrumbs",
-}
+# ---------------------------------------------------------------------------
+# Gluten detection helpers — shared logic with src/scoring/validator.py
+# ---------------------------------------------------------------------------
+
+# Complete ingredient names (lowercased) that contain hidden gluten.
+# These are sources the nutrition vector cannot reveal — gluten comes from
+# derived ingredients (soy sauce from wheat, malt vinegar from barley, etc.)
+_GLUTEN_EXACT = frozenset({
+    "soy sauce", "dark soy sauce", "light soy sauce",
+    "low sodium soy sauce", "reduced sodium soy sauce",
+    "teriyaki sauce", "teriyaki marinade", "hoisin sauce",
+    "malt vinegar", "malt extract", "malt flavoring", "malted milk",
+    "beer", "ale", "lager", "stout", "porter", "wheat beer",
+    "worcestershire sauce",
+    "panko", "panko breadcrumbs", "panko bread crumbs",
+    "udon", "udon noodles",
+    "ramen", "ramen noodles",
+    "lo mein noodles", "chow mein noodles",
+    "soba noodles",
+    "egg noodles",
+    "pasta",
+    "pita", "pita bread",
+    "naan", "naan bread",
+    "phyllo", "phyllo dough", "filo", "filo dough",
+    "puff pastry",
+    "graham crackers",
+    "pretzels",
+    "saltine crackers", "saltines",
+    "croutons",
+    "flour tortillas",
+})
+
+# Words indicating gluten when present as a standalone token in an ingredient.
+# Word-level tokenization prevents "buckwheat" → "wheat" false-positive and
+# "almond flour" handled separately via _GF_FLOUR_MODIFIERS.
+_GLUTEN_WORDS = frozenset({
+    "wheat", "flour", "barley", "rye", "spelt", "farro", "bulgur",
+    "durum", "semolina", "triticale", "kamut", "einkorn",
+    "matzo", "matzoh", "couscous", "orzo", "breadcrumbs",
+})
+
+# When "flour" is the only gluten word and one of these modifiers is also
+# present, the ingredient is a gluten-free flour (e.g., almond flour).
+_GF_FLOUR_MODIFIERS = frozenset({
+    "almond", "rice", "buckwheat", "coconut", "chickpea", "corn",
+    "potato", "tapioca", "arrowroot", "amaranth", "teff", "sorghum",
+    "cassava", "tigernut", "chestnut", "oat",
+})
+
+
+def _ingredient_contains_gluten(ingredient: str) -> bool:
+    ing = ingredient.lower().strip()
+    if ing in _GLUTEN_EXACT:
+        return True
+    words = frozenset(re.split(r"[\s\-]+", ing))
+    gluten_hits = words & _GLUTEN_WORDS
+    if not gluten_hits:
+        return False
+    if gluten_hits == {"flour"} and words & _GF_FLOUR_MODIFIERS:
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -62,9 +117,11 @@ def add_dietary_flags(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
 
     # --- Gluten-free ---
     # Ingredient-level check — cannot be inferred from the nutrition vector.
-    # We scan the ingredients string for known gluten-containing items.
-    df["is_gluten_free"] = df["ingredients_str"].apply(
-        lambda s: not any(g in s.lower() for g in GLUTEN_KEYWORDS)
+    # Checks each ingredient in the list individually (not the joined string)
+    # to avoid substring false-positives ("buckwheat"→"wheat", "almond flour"→"flour")
+    # and catches hidden gluten sources (soy sauce, malt vinegar, beer, udon, etc.)
+    df["is_gluten_free"] = df["ingredients"].apply(
+        lambda lst: not any(_ingredient_contains_gluten(i) for i in lst)
     )
 
     # --- Low-fat ---

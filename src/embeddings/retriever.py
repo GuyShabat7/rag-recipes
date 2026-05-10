@@ -46,6 +46,7 @@ from src.embeddings.encoder import RecipeEncoder
 from src.embeddings.indexer import load_index
 from src.scoring.ingredient_scorer import score_dataframe_ingredient_match
 from src.scoring.nutritional_scorer import score_recipe
+from src.scoring.validator import validate_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -285,12 +286,29 @@ class RecipeRetriever:
         id_to_score = dict(zip(candidate_recipe_ids, semantic_scores))
         candidate_df["semantic_score"] = candidate_df.index.map(id_to_score)
 
-        # Step 6: Nutritional score
+        # Step 6: Runtime re-validation — second pass correctness check.
+        # Catches stale flags (config drift since parquet was built) and hidden
+        # gluten sources (soy sauce etc.) that IDSelectorBatch couldn't catch
+        # because the stored is_gluten_free flag was incorrectly True.
+        # Runs on at most max_constrained_candidates rows; <1ms overhead.
+        if dietary_constraints:
+            candidate_df, n_discarded = validate_candidates(
+                candidate_df, dietary_constraints, self.cfg
+            )
+            if candidate_df.empty:
+                logger.warning(
+                    "All candidates failed runtime validation. "
+                    "This indicates a systematic data quality issue — "
+                    "consider rebuilding the parquet with updated feature_engineering.py."
+                )
+                return pd.DataFrame()
+
+        # Step 7: Nutritional score
         candidate_df["nutritional_score"] = candidate_df.apply(
             lambda row: score_recipe(row, dietary_constraints)[0], axis=1
         )
 
-        # Step 7: Ingredient match score (only when user provides ingredients)
+        # Step 8: Ingredient match score (only when user provides ingredients)
         if user_ingredients:
             ing_scores, matched_lists, missing_lists = score_dataframe_ingredient_match(
                 candidate_df, user_ingredients, ingredients_col="ingredients"
@@ -303,7 +321,7 @@ class RecipeRetriever:
             candidate_df["matched_ingredients"] = None
             candidate_df["missing_ingredients"] = None
 
-        # Step 8: Hybrid re-ranking
+        # Step 9: Hybrid re-ranking
         pop_norm = candidate_df["log_review_count"].fillna(0)
         pop_max = max(float(pop_norm.max()), 1.0)
         pop_normalized = pop_norm / pop_max
