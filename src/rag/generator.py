@@ -88,6 +88,21 @@ class RAGPipeline:
             user_ingredients=user_ingredients,
         )
 
+        # Empty DataFrame means the compliant pool was empty — don't call the LLM.
+        if results_df.empty:
+            constraint_labels = [c.replace("is_", "").replace("_", " ") for c in dietary_constraints]
+            return {
+                "query": query,
+                "dietary_constraints": dietary_constraints,
+                "user_ingredients": user_ingredients,
+                "recipes": [],
+                "response": (
+                    f"No recipes were found that satisfy all of your dietary requirements "
+                    f"({', '.join(constraint_labels)}). Try relaxing one constraint or "
+                    "broadening your query."
+                ),
+            }
+
         # Build per-recipe explanation text
         recipes = []
         for _, row in results_df.iterrows():

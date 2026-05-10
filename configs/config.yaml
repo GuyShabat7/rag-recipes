@@ -30,7 +30,9 @@ embedding:
   dimension: 384
 
 retrieval:
-  faiss_candidates: 50
+  faiss_candidates: 50          # candidate pool for unconstrained queries
+  constrained_candidates_multiplier: 20   # k * multiplier when constraints are active
+  max_constrained_candidates: 500         # cap so constrained search doesn't become slow
   top_k: 5
   score_weights:
     # Weights when NO ingredient list is provided (original behaviour)
