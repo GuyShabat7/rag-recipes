@@ -1,0 +1,58 @@
+data:
+  raw_recipes: data/raw/RAW_recipes.csv
+  raw_interactions: data/raw/RAW_interactions.csv
+  cleaned: data/processed/recipes_cleaned.parquet
+  featured: data/processed/recipes_featured.parquet
+  faiss_index: data/processed/faiss_index.bin
+  recipe_ids: data/processed/recipe_ids.npy
+  eval_queries: data/splits/eval_queries.json
+  ground_truth: data/splits/ground_truth.json
+
+cleaning:
+  min_ingredients: 3
+  min_steps: 2
+  max_minutes: 600
+  nutrition_cap_percentile: 99
+
+nutritional_flags:
+  low_sugar_pdv: 5
+  high_protein_pdv: 20
+  low_fat_pdv: 10
+  low_sodium_pdv: 10
+  low_calorie_kcal: 400
+  keto_max_carbs_pdv: 10
+  keto_min_fat_pdv: 25
+  low_carb_pdv: 15
+
+embedding:
+  model_name: sentence-transformers/all-MiniLM-L6-v2
+  batch_size: 512
+  dimension: 384
+
+retrieval:
+  faiss_candidates: 50
+  top_k: 5
+  score_weights:
+    # Weights when NO ingredient list is provided (original behaviour)
+    semantic: 0.6
+    nutritional: 0.3
+    popularity: 0.1
+  score_weights_with_ingredients:
+    # Weights when user provides an ingredient list
+    # Ingredient match replaces some semantic weight — explicit overlap is a stronger signal
+    semantic: 0.4
+    nutritional: 0.25
+    ingredient_match: 0.25
+    popularity: 0.1
+
+llm:
+  model: models/gemini-2.5-flash
+  max_tokens: 1500
+  temperature: 0.3
+  base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+
+evaluation:
+  k_values: [5, 10]
+  min_rating_for_relevant: 4.0
+  min_reviews_for_relevant: 10
+  n_eval_queries: 200
