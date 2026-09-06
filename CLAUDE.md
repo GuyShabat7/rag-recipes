@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Install dependencies (use the .venv in the repo root)
+# Install dependencies (use the venv/ in the repo root)
 pip install -r requirements.txt
 
 # Run FastAPI server (must be run from the repo root)
