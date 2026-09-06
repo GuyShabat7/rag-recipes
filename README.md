@@ -1,4 +1,4 @@
-# rag-recipes
+# rag-recipies
 
 A retrieval-augmented recipe recommendation system over ~223,000 Food.com recipes. Ask for food in plain English — *"high protein gluten free dinner"* — and get back recipes that are semantically relevant, nutritionally scored, and **guaranteed** to satisfy the dietary constraint you asked for.
 
